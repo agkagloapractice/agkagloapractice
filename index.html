@@ -661,7 +661,7 @@
           <div class="settings-row">
             <div class="settings-row-left">
               <div class="settings-row-title">AGK AGLOA Practice</div>
-              <div class="settings-row-desc">Built by Adithan G. · Version 1.5</div>
+              <div class="settings-row-desc">Built by Adithan G. · Version 1.6</div>
             </div>
           </div>
         </div>
@@ -767,7 +767,118 @@
     <button class="btn btn-primary" onclick="closeResults()" style="width:100%;justify-content:center;">Try Again</button>
   </div>
 </div>
- 
+
+<!-- ===== FIREBASE SDKs ===== -->
+<script type="module">
+// ────────────────────────────────────────────────────────────
+// FIREBASE CONFIG — replace the values below with your own.
+// Steps (free, 2 min):
+//  1. Go to https://console.firebase.google.com
+//  2. Click "Add project" → name it → disable Google Analytics → Create
+//  3. Click the </> (Web) icon → register the app → copy the firebaseConfig
+//  4. In the Firebase console sidebar: Build → Authentication → Get started
+//     → Sign-in method → Email/Password → Enable → Save
+//  5. In the sidebar: Build → Firestore Database → Create database → Start in
+//     production mode → choose a region → Enable
+//  6. Firestore → Rules → paste this rule and Publish:
+//       rules_version = '2';
+//       service cloud.firestore {
+//         match /databases/{database}/documents {
+//           match /users/{userId} {
+//             allow read, write: if request.auth != null && request.auth.uid == userId;
+//           }
+//         }
+//       }
+// ────────────────────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         signOut, onAuthStateChanged, updateProfile, deleteUser }
+  from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc }
+  from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+// ── PASTE YOUR CONFIG HERE ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAux_Lq3RjSd97f1w_M2fgsWL-fAA40fbg",
+  authDomain: "agk-agloa-practice.firebaseapp.com",
+  projectId: "agk-agloa-practice",
+  storageBucket: "agk-agloa-practice.firebasestorage.app",
+  messagingSenderId: "201354843134",
+  appId: "1:201354843134:web:3d547e06993ee7e9ed26af"
+};
+
+const _fbApp  = initializeApp(firebaseConfig);
+const _auth   = getAuth(_fbApp);
+const _db     = getFirestore(_fbApp);
+
+// ── helpers ──
+async function _saveCloudProfile(uid, data){
+  await setDoc(doc(_db,'users',uid), data, {merge:true});
+}
+async function _loadCloudProfile(uid){
+  const snap = await getDoc(doc(_db,'users',uid));
+  return snap.exists() ? snap.data() : {};
+}
+
+// ── expose to global scope so non-module code can call them ──
+window._fbAuth        = _auth;
+window._fbDb          = _db;
+window._fbSignUp      = async function(email, pw, displayName){
+  const cred = await createUserWithEmailAndPassword(_auth, email, pw);
+  await updateProfile(cred.user, {displayName});
+  await _saveCloudProfile(cred.user.uid, {name: displayName, email});
+  return cred.user;
+};
+window._fbSignIn      = async function(email, pw){
+  const cred = await signInWithEmailAndPassword(_auth, email, pw);
+  const cloud = await _loadCloudProfile(cred.user.uid);
+  return {fbUser: cred.user, cloud};
+};
+window._fbSignOut     = async function(){ await signOut(_auth); };
+window._fbDelete      = async function(){
+  const u = _auth.currentUser;
+  if(!u) return;
+  await deleteDoc(doc(_db,'users',u.uid));
+  await deleteUser(u);
+};
+window._fbSaveProfile = async function(data){
+  const u = _auth.currentUser;
+  if(u) await _saveCloudProfile(u.uid, data);
+};
+window._fbLoadProfile = async function(){
+  const u = _auth.currentUser;
+  if(!u) return null;
+  return await _loadCloudProfile(u.uid);
+};
+window._fbReady = true;
+
+// ── listen for auth state so a refresh keeps the user signed in ──
+onAuthStateChanged(_auth, async fbUser => {
+  if(fbUser){
+    const cloud = await _loadCloudProfile(fbUser.uid);
+    const merged = {
+      email: fbUser.email,
+      name: cloud.name || fbUser.displayName || 'User',
+      photo: cloud.photo || fbUser.photoURL || null,
+      isGuest: false,
+      uid: fbUser.uid
+    };
+    // Only auto-restore if nothing is already stored for this session
+    const stored = (() => { try{ return JSON.parse(localStorage.getItem('agk_user')); } catch(e){ return null; } })();
+    if(!stored || stored.email !== fbUser.email){
+      localStorage.setItem('agk_user', JSON.stringify(merged));
+      if(typeof updateUserChip === 'function') updateUserChip();
+      if(typeof updateSettingsProfile === 'function') updateSettingsProfile();
+      if(document.getElementById('auth-overlay') && !document.getElementById('auth-overlay').classList.contains('hidden')){
+        document.getElementById('auth-overlay').classList.add('hidden');
+        if(typeof render === 'function') render();
+        if(typeof updateStreak === 'function') updateStreak();
+      }
+    }
+  }
+});
+</script>
+
 <script>
 // ============================================================
 // PROPAGANDA SECTIONS (full reference data)
@@ -1831,10 +1942,28 @@ function handleSignIn(){
   const err=document.getElementById('signin-error');
   if(!email||!pw){showAuthError(err,'Please fill in all fields.');return;}
   if(!isValidEmail(email)){showAuthError(err,'Please enter a valid email address.');return;}
-  const existing=getStoredAccounts()[email];
-  if(!existing){showAuthError(err,'No account found with that email. Try signing up!');return;}
-  if(existing.pw!==hashSimple(pw)){showAuthError(err,'Incorrect password. Please try again.');return;}
-  signInUser({email,name:existing.name,isGuest:false});
+  const btn=document.querySelector('#auth-signin-form .auth-submit');
+  if(btn){btn.disabled=true;btn.textContent='Signing in…';}
+  if(window._fbReady && window._fbSignIn){
+    window._fbSignIn(email,pw).then(({fbUser,cloud})=>{
+      const user={email,name:cloud.name||fbUser.displayName||'User',photo:cloud.photo||null,isGuest:false,uid:fbUser.uid};
+      signInUser(user);
+    }).catch(e=>{
+      if(btn){btn.disabled=false;btn.textContent='Sign In →';}
+      const msg=e.code==='auth/user-not-found'||e.code==='auth/invalid-credential'?'No account found with that email. Try signing up!'
+               :e.code==='auth/wrong-password'?'Incorrect password. Please try again.'
+               :e.code==='auth/too-many-requests'?'Too many attempts. Please try again later.'
+               :'Sign in failed. Please try again.';
+      showAuthError(err,msg);
+    });
+  } else {
+    // Fallback: localStorage only (Firebase not yet configured)
+    const existing=getStoredAccounts()[email];
+    if(btn){btn.disabled=false;btn.textContent='Sign In →';}
+    if(!existing){showAuthError(err,'No account found with that email. Try signing up!');return;}
+    if(existing.pw!==hashSimple(pw)){showAuthError(err,'Incorrect password. Please try again.');return;}
+    signInUser({email,name:existing.name,isGuest:false});
+  }
 }
 
 function handleSignUp(){
@@ -1849,13 +1978,31 @@ function handleSignUp(){
   if(!isValidEmail(email)){showAuthError(err,'Please enter a valid email address.');return;}
   if(pw.length<6){showAuthError(err,'Password must be at least 6 characters.');return;}
   if(pw!==confirm){showAuthError(err,'Passwords do not match.');return;}
-  const accounts=getStoredAccounts();
-  if(accounts[email]){showAuthError(err,'An account with this email already exists. Sign in instead.');return;}
-  accounts[email]={name:first+(last?' '+last:''),pw:hashSimple(pw)};
-  localStorage.setItem('agk_accounts',JSON.stringify(accounts));
+  const displayName=first+(last?' '+last:'');
+  const btn=document.querySelector('#auth-signup-form .auth-submit');
+  if(btn){btn.disabled=true;btn.textContent='Creating account…';}
   err.className='auth-error';err.textContent='';
-  suc.textContent='Account created! Signing you in…';suc.className='auth-success show';
-  setTimeout(()=>signInUser({email,name:first+(last?' '+last:''),isGuest:false}),900);
+  if(window._fbReady && window._fbSignUp){
+    window._fbSignUp(email,pw,displayName).then(fbUser=>{
+      suc.textContent='Account created! Signing you in…';suc.className='auth-success show';
+      setTimeout(()=>signInUser({email,name:displayName,photo:null,isGuest:false,uid:fbUser.uid}),900);
+    }).catch(e=>{
+      if(btn){btn.disabled=false;btn.textContent='Create Account →';}
+      const msg=e.code==='auth/email-already-in-use'?'An account with this email already exists. Sign in instead.'
+               :e.code==='auth/weak-password'?'Password must be at least 6 characters.'
+               :'Account creation failed. Please try again.';
+      showAuthError(err,msg);
+    });
+  } else {
+    // Fallback: localStorage only
+    const accounts=getStoredAccounts();
+    if(accounts[email]){if(btn){btn.disabled=false;btn.textContent='Create Account →';}showAuthError(err,'An account with this email already exists. Sign in instead.');return;}
+    accounts[email]={name:displayName,pw:hashSimple(pw)};
+    localStorage.setItem('agk_accounts',JSON.stringify(accounts));
+    suc.textContent='Account created! Signing you in…';suc.className='auth-success show';
+    if(btn){btn.disabled=false;btn.textContent='Create Account →';}
+    setTimeout(()=>signInUser({email,name:displayName,isGuest:false}),900);
+  }
 }
 
 function continueAsGuest(){
@@ -1875,6 +2022,7 @@ function signInUser(user){
 function handleSignOut(){
   if(!confirm('Sign out of your account?')) return;
   localStorage.removeItem(AUTH_KEY);
+  if(window._fbReady && window._fbSignOut) window._fbSignOut().catch(()=>{});
   closeSettings();
   showAuthOverlay();
 }
@@ -1883,9 +2031,13 @@ function handleDeleteAccount(){
   const u=getUser();
   if(!u||u.isGuest) return;
   if(!confirm('Permanently delete your account? This cannot be undone.')) return;
-  const accounts=getStoredAccounts();
-  if(accounts[u.email]){delete accounts[u.email];localStorage.setItem('agk_accounts',JSON.stringify(accounts));}
   localStorage.removeItem(AUTH_KEY);
+  if(window._fbReady && window._fbDelete){
+    window._fbDelete().catch(()=>{});
+  } else {
+    const accounts=getStoredAccounts();
+    if(accounts[u.email]){delete accounts[u.email];localStorage.setItem('agk_accounts',JSON.stringify(accounts));}
+  }
   closeSettings();
   showAuthOverlay();
 }
@@ -1978,9 +2130,9 @@ function saveProfileName(){
   const u=getUser()||{name:'Guest',isGuest:true,email:''};
   u.name=input.value.trim();
   saveUser(u);
+  if(window._fbReady && window._fbSaveProfile) window._fbSaveProfile({name:u.name});
   updateSettingsProfile();
   updateUserChip();
-  // Flash confirmation
   input.style.borderColor='var(--accent-green)';
   setTimeout(()=>input.style.borderColor='',1200);
 }
@@ -1995,6 +2147,7 @@ function saveProfilePic(input){
     const u=getUser()||{name:'Guest',isGuest:true,email:''};
     u.photo=e.target.result;
     saveUser(u);
+    if(window._fbReady && window._fbSaveProfile) window._fbSaveProfile({photo:u.photo});
     updateSettingsProfile();
     updateUserChip();
   };
