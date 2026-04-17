@@ -263,10 +263,7 @@
   .feedback-desc{font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5}
   .feedback-modal-body textarea{width:100%;box-sizing:border-box;min-height:110px;border-radius:12px;border:1.5px solid rgba(0,0,0,0.12);padding:12px;font-family:inherit;font-size:14px;color:var(--text-primary);background:rgba(255,255,255,0.8);resize:vertical;transition:border 0.15s;outline:none}
   .feedback-modal-body textarea:focus{border-color:var(--accent-blue)}
-  .feedback-file-label{display:flex;align-items:center;gap:8px;margin-top:12px;padding:11px 14px;background:rgba(0,122,255,0.07);border:1.5px dashed rgba(0,122,255,0.28);border-radius:12px;cursor:pointer;font-size:13px;color:var(--accent-blue);font-weight:500;transition:all 0.16s;user-select:none}
-  .feedback-file-label:hover{background:rgba(0,122,255,0.12)}
-  .feedback-file-label input[type="file"]{display:none}
-  .feedback-file-name{font-size:12px;color:var(--text-tertiary);margin-top:5px;min-height:16px}
+
   .feedback-form-err{font-size:13px;color:#FF3B30;margin-top:8px;min-height:16px;display:none}
   .feedback-form-err.show{display:block}
   .feedback-modal-footer{display:flex;gap:10px;justify-content:flex-end;padding:16px 22px}
@@ -660,8 +657,8 @@
         <div class="settings-group">
           <div class="settings-row">
             <div class="settings-row-left">
-              <div class="settings-row-title">AGK AGLOA Practice</div>
-              <div class="settings-row-desc">Built by Adithan G. · Version 1.6</div>
+              <div class="settings-row-title">Built By Adithan G.</div>
+              <div class="settings-row-desc">Version 1.7.0 Alpha</div>
             </div>
           </div>
         </div>
@@ -681,11 +678,6 @@
     <div class="feedback-modal-body">
       <div class="feedback-desc">Share a bug, suggestion, or anything on your mind. We read every message!</div>
       <textarea id="feedback-text" placeholder="Write your feedback here…"></textarea>
-      <label class="feedback-file-label" for="feedback-file">
-        <span>📎 Attach a screenshot</span>
-        <input type="file" id="feedback-file" accept="image/*" onchange="updateFeedbackFileLabel(this)" />
-      </label>
-      <div class="feedback-file-name" id="feedback-file-name"></div>
       <div class="feedback-form-err" id="feedback-form-err"></div>
     </div>
     <div class="feedback-modal-footer">
@@ -742,7 +734,7 @@
       </div>
     </div>
     <h1>AGK AGLOA Practice</h1>
-    <p>Flashcards, quizzes &amp; reference for Presidents, Propaganda, and Current Events. This tool is designed and built by Adithan G.</p>
+    <p>Flashcards, quizzes &amp; reference for Presidents, Propaganda, Current Events, Theme &amp; LinguiSHTIK. Built by Adithan G.</p>
   </div>
   <div class="nav">
     <button class="nav-tab active" onclick="switchMode('flashcards')">Flashcards</button>
@@ -754,7 +746,8 @@
     <button class="subject-btn active" onclick="setSubject('propaganda')" id="sbtn-propaganda"><span class="subject-icon">🗣️</span> Propaganda</button>
     <button class="subject-btn" onclick="setSubject('presidents')" id="sbtn-presidents"><span class="subject-icon">🎖️</span> Presidents</button>
     <button class="subject-btn" onclick="setSubject('currentevents')" id="sbtn-currentevents"><span class="subject-icon">🌍</span> Current Events</button>
-
+    <button class="subject-btn" onclick="setSubject('theme')" id="sbtn-theme"><span class="subject-icon">📜</span> Theme</button>
+    <button class="subject-btn" onclick="setSubject('linguistics')" id="sbtn-linguistics"><span class="subject-icon">📝</span> LinguiSHTIK</button>
   </div>
   <div id="main-content"></div>
 </div>
@@ -797,7 +790,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          signOut, onAuthStateChanged, updateProfile, deleteUser }
   from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, deleteDoc }
+import { getFirestore, doc, setDoc, getDoc, deleteDoc,
+         collection, addDoc, getDocs, query, orderBy, updateDoc }
   from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 
 // ── PASTE YOUR CONFIG HERE ──
@@ -853,6 +847,19 @@ window._fbLoadProfile = async function(){
   if(!u) return null;
   return await _loadCloudProfile(u.uid);
 };
+// ── feedback Firestore helpers ──
+window._fbAddFeedback = async function(entry){
+  await addDoc(collection(_db,'feedback'), entry);
+};
+window._fbGetFeedback = async function(){
+  const q = query(collection(_db,'feedback'), orderBy('ts','desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+};
+window._fbMarkFeedbackRead = async function(id){
+  await updateDoc(doc(_db,'feedback',id), {read:true});
+};
+
 window._fbReady = true;
 if(window._fbReadyResolve) window._fbReadyResolve();
 
@@ -1018,7 +1025,7 @@ const PRES_ERAS=[
 ];
  
 // ============================================================
-// FLASHCARD DATA (Propaganda, Presidents, Current Events only)
+// FLASHCARD DATA
 // ============================================================
 const FLASHCARD_DATA={
   propaganda:[
@@ -1116,7 +1123,19 @@ const FLASHCARD_DATA={
     {q:'Example: "No one has proven aliens don\'t exist — therefore they definitely exist." What technique?',a:'Appeal to Ignorance — the absence of disproof is treated as proof. The burden of proof is improperly reversed.',section:'Section F – Maneuver'},
     {q:'Example: "No true Scotsman would ever do such a thing." (Redefines "true Scotsman" to exclude anyone who does.) What technique?',a:'Victory by Definition — the definition is adjusted to exclude counterexamples, making the conclusion true by definition rather than by evidence.',section:'Section F – Maneuver'},
     {q:'Example: Q: "Should we raise the minimum wage?" A: "Our city has a great parks department." What technique?',a:'Inconsequent Argument — the response may be true but has absolutely nothing to do with the question asked. Unlike Diversion, which actively redirects, this argument simply fails to address the issue.',section:'Section F – Maneuver'},
-  ],
+      // ── Section A missing examples ──
+    {q:'Example: "I failed the test because the teacher has always had it out for me." What technique?',a:'Rationalization — the speaker invents a plausible justification AFTER the fact to avoid accepting responsibility. The excuse is created to protect the ego, not to explain the original decision.',section:'Section A'},
+    {q:'Example: "I just know my team will win the championship — I can feel it!" What technique?',a:'Wishful Thinking — belief is driven entirely by desire, with no supporting evidence. If the speaker were using actual reasons, it would be Rationalization or another technique instead.',section:'Section A'},
+    {q:'Example: A hiring manager throws out all resumes with foreign-sounding names before reading them. What technique?',a:'Prejudice — the manager acts on a prejudgment without examining any evidence. Prejudice is acting on a biased pre-conclusion; it differs from Tabloid Thinking, which attaches a dismissive label.',section:'Section A'},
+    {q:'Example: "Crime has gone up since immigration increased — immigrants are causing crime." What technique?',a:'Causal Oversimplification — a complex social problem (crime) is blamed entirely on one convenient cause (immigration) while ignoring dozens of other contributing factors.',section:'Section A'},
+    // ── Section B missing examples ──
+    {q:'Example: "This savage, heartless policy will shatter the lives of innocent families." What technique?',a:'Emotional Terms — words like savage, heartless, and shatter load the sentence with powerful negative emotion far beyond what the facts themselves justify. The language is designed to arouse feeling rather than inform.',section:'Section B'},
+    {q:'Example: A candidate chants "Make Our Schools Great Again!" with no specific education policy. What technique?',a:'Slogans — a catchy, emotionally charged phrase substitutes for a reasoned argument. A slogan inspires agreement without requiring any evaluation of evidence or policy.',section:'Section B'},
+    {q:'Example: A politician promises "meaningful reform in the near future." What technique?',a:'Vagueness — the statement commits to nothing. What reform? When? How much? Vagueness allows the speaker to appeal broadly while avoiding any specific accountability.',section:'Section B'},
+    {q:'Example: An ad repeats "More power. More speed. More power. More speed." twenty times. What technique?',a:'Repetition — a message is repeated until it is accepted without critical evaluation. Frequent repetition can make a claim feel true simply through familiarity, regardless of evidence.',section:'Section B'},
+    {q:'Example: A coach tells a player: "You will get what you deserve after this season." (Could be a reward or a threat.) What technique?',a:'Ambiguity — the phrase intentionally carries two very different meanings. The speaker leaves it unclear which is intended, allowing interpretation to work in their favor.',section:'Section B'},
+    {q:'Example: "The word awful once meant inspiring awe — so describing your poem as awful is actually a compliment!" What technique?',a:'Shift of Meaning — an older or different sense of a word is exploited to confuse or mislead. The audience is disoriented by the deliberate sliding between meanings.',section:'Section B'},
+],
   presidents:[
     {q:'Who was the 1st U.S. President and what was his party?',a:'George Washington (1789–1797) — No political party. Born in Virginia. Set the two-term precedent.',section:'Founding Era',group:['1-17']},
     {q:'Which president purchased the Louisiana Territory and sent Lewis & Clark westward?',a:'Thomas Jefferson (3rd President, 1801–1809) — Democratic-Republican.',section:'Founding Era',group:['1-17']},
@@ -1214,10 +1233,65 @@ const FLASHCARD_DATA={
     {q:'What is a "deepfake" and why is it a concern?',a:'AI-generated synthetic media — realistic fake videos, images, or audio of real people saying or doing things they never did. Deepfakes threaten personal reputation, election integrity, and the ability to trust digital evidence.',section:'Technology'},
     {q:'What is the "digital divide"?',a:'The gap in access to internet and digital technology between wealthy and lower-income populations or between urban and rural areas. Digital access is increasingly essential for education, employment, and civic participation.',section:'Technology'},
   ],
+  theme:[
+    {q:'Who is Odin in Norse mythology?',a:'Odin is the chief of the Norse gods, associated with wisdom, war, death, magic, and poetry. He sacrificed his eye at the Well of Mimir to gain wisdom and hung on the World Tree Yggdrasil to discover the runes.',section:'Norse Mythology'},
+    {q:'What is Yggdrasil in Norse mythology?',a:'Yggdrasil is the immense sacred tree in Norse cosmology that connects the Nine Worlds, including Asgard (the home of the gods), Midgard (the human world), and Hel (the realm of the dead).',section:'Norse Mythology'},
+    {q:'Who is Thor and what is he known for?',a:'Thor is the Norse god of thunder, strength, and storms. He wields the hammer Mjolnir and is known as the protector of both gods and humans against giants.',section:'Norse Mythology'},
+    {q:'What is Ragnarok in Norse mythology?',a:'Ragnarok is the prophesied end of the world in Norse mythology, in which gods and giants battle, most of the gods die including Odin and Thor, the world is destroyed, and then reborn.',section:'Norse Mythology'},
+    {q:'Why is Washington, D.C. different from a state?',a:'Washington, D.C. is a federal district created to serve as the nation\'s capital instead of belonging to any one state. The Constitution allowed Congress to establish a separate seat of government.',section:'Washington, D.C.'},
+    {q:'What are the three branches centered in Washington, D.C.?',a:'The legislative branch meets at the Capitol, the executive branch is led from the White House, and the judicial branch is headed by the Supreme Court building. Together they make D.C. the center of federal government.',section:'Washington, D.C.'},
+    {q:'Why is Chuck Berry often called a pioneer of rock and roll?',a:'Chuck Berry helped define rock and roll through guitar riffs, energetic performance, and songs that connected rhythm and blues to a broader youth audience. His style influenced generations of later rock musicians.',section:'History of Rock & Roll'},
+    {q:'How did rock and roll grow out of earlier music traditions?',a:'Rock and roll developed from rhythm and blues, country, gospel, and blues traditions. Its history is also a story about cultural exchange, mass media, youth culture, and changing American society.',section:'History of Rock & Roll'},
+    {q:'What was the Cold War?',a:'The Cold War was a long period of rivalry between the United States and the Soviet Union from roughly 1947 to 1991. It featured military tension, ideology, proxy wars, nuclear arms buildup, and global competition without direct full-scale war between the two superpowers.',section:'Cold War'},
+    {q:'Why was the Berlin Wall important during the Cold War?',a:'The Berlin Wall became a major symbol of Cold War division between communist East and democratic West. Its fall in 1989 represented the weakening of Soviet control in Eastern Europe.',section:'Cold War'},
+    {q:'What does the term “Gilded Age” suggest?',a:'The term suggests a surface of wealth and shine covering deeper problems beneath it. The era from 1865 to 1913 saw huge industrial growth and fortunes, but also corruption, labor conflict, inequality, and harsh urban conditions.',section:'Gilded Age'},
+    {q:'Why were industrialists and reformers both important in the Gilded Age?',a:'Industrialists built vast businesses and transformed the economy, while reformers pushed back against corruption, dangerous labor conditions, monopolies, and social inequality. Understanding the era requires looking at both expansion and criticism.',section:'Gilded Age'},
+    {q:'Why are the 1990s often associated with rapid technological change?',a:'The 1990s saw the rise of the internet, personal computers in everyday life, mobile communication growth, and a more connected global economy. These developments reshaped work, media, and daily life.',section:'The 1990s'},
+    {q:'What major world change at the start of the 1990s shaped the decade?',a:'The collapse of the Soviet Union helped end the Cold War and changed the international system. It left the United States as the dominant global power for much of the decade.',section:'The 1990s'},
+    {q:'What is the main role of the United States Supreme Court?',a:'The Supreme Court is the highest court in the federal judiciary. It interprets the Constitution, resolves major legal disputes, and can strike down laws or government actions found unconstitutional.',section:'U.S. Supreme Court'},
+    {q:'Why are Supreme Court cases so important in U.S. history?',a:'Major Court decisions shape civil rights, federal power, free speech, criminal procedure, and the balance between government and individual liberty. A single ruling can affect national life for generations.',section:'U.S. Supreme Court'},
+    {q:'Why is the topic “Women Who Changed the World” historically broad?',a:'It includes women from politics, science, activism, literature, reform, and public life whose actions reshaped societies. The topic emphasizes influence, leadership, and how women challenged limitations placed on them.',section:'Women Who Changed the World'},
+    {q:'Why are women’s rights movements central to modern history?',a:'Women’s rights movements expanded opportunities in education, politics, work, law, and public participation. They changed both legal systems and social expectations across many countries.',section:'Women Who Changed the World'},
+    {q:'Why do Greek and Roman myths remain important?',a:'These myths shaped later literature, art, language, and ideas about heroism, fate, power, and human weakness. Their characters and stories continue to influence Western culture.',section:'Greek & Roman Mythology'},
+    {q:'What is one major difference between gods and heroes in classical mythology?',a:'Gods are divine beings with supernatural power, while heroes are often mortal or partly divine figures whose stories focus on struggle, courage, and flawed choices. Myths often compare divine power with human limits.',section:'Greek & Roman Mythology'},
+      // ── Additional Theme cards ──
+    {q:'Who is Loki in Norse mythology?',a:'Loki is the trickster god, a shape-shifter who causes trouble for the gods through cunning and deception. He is the father of several terrifying beings, including the wolf Fenrir, the serpent Jormungandr, and the death goddess Hel.',section:'Norse Mythology'},
+    {q:'Who is Freya in Norse mythology?',a:'Freya is the Norse goddess of love, fertility, and war. She has the ability to travel between worlds and is closely linked to magic (seidr). She receives half of those slain in battle in her hall Folkvangr.',section:'Norse Mythology'},
+    {q:'What major monument in Washington, D.C. honors the 16th president?',a:'The Lincoln Memorial honors Abraham Lincoln. It is located on the National Mall and features a large seated statue of Lincoln. His Gettysburg Address and Second Inaugural Address are inscribed on its walls.',section:'Washington, D.C.'},
+    {q:'What constitutional amendment gave Washington, D.C. residents the right to vote for president?',a:'The 23rd Amendment (1961) gave D.C. residents the right to vote in presidential elections, though D.C. still has no voting representation in Congress.',section:'Washington, D.C.'},
+    {q:'Who is often called the "King of Rock and Roll"?',a:'Elvis Presley is widely called the King of Rock and Roll. His fusion of country, gospel, and rhythm and blues created a style that defined early rock in the 1950s and made him a global cultural icon.',section:'History of Rock & Roll'},
+    {q:'What was the British Invasion in rock and roll history?',a:'The British Invasion refers to the wave of British rock acts that swept the U.S. in the mid-1960s, led by The Beatles. It transformed American pop music and proved that rock and roll had become a global force.',section:'History of Rock & Roll'},
+    {q:'What was the Korean War and how does it connect to the Cold War?',a:'The Korean War (1950-1953) was one of the first major proxy conflicts of the Cold War, in which the U.S.-backed South Korea and China-backed North Korea fought. It ended in an armistice, not a peace treaty, and the peninsula remains divided.',section:'Cold War'},
+    {q:'What was the Cuban Missile Crisis?',a:'The Cuban Missile Crisis (October 1962) was the closest the Cold War came to nuclear war. The Soviet Union secretly placed nuclear missiles in Cuba; the U.S. blockaded the island. After 13 days of tense negotiation, the Soviets withdrew the missiles.',section:'Cold War'},
+    {q:'Who were the "Robber Barons" of the Gilded Age?',a:'Robber Barons were wealthy industrialists who built massive business empires through aggressive, often monopolistic practices. Key figures include John D. Rockefeller (oil), Andrew Carnegie (steel), and J.P. Morgan (banking). Critics accused them of exploiting workers and eliminating competition.',section:'Gilded Age'},
+    {q:'What was the significance of the Homestead Strike of 1892?',a:'The Homestead Strike was a major labor conflict at Andrew Carnegie\'s steel plant in Pennsylvania. When Carnegie\'s manager cut wages and locked out workers, a violent confrontation resulted. It was a defining moment in the battle between industrial power and labor rights.',section:'Gilded Age'},
+    {q:'What was NAFTA and why was it controversial in the 1990s?',a:'NAFTA (North American Free Trade Agreement), signed by President Clinton in 1993, eliminated most trade barriers between the U.S., Canada, and Mexico. Supporters said it boosted trade; critics argued it cost American manufacturing jobs by moving factories to Mexico.',section:'The 1990s'},
+    {q:'What were the major domestic issues of the Clinton presidency?',a:'President Clinton (1993-2001) presided over economic prosperity, budget surpluses, and welfare reform. His presidency was also marked by the Monica Lewinsky scandal and his impeachment by the House in 1998, though he was acquitted by the Senate.',section:'The 1990s'},
+    {q:'What was the significance of Marbury v. Madison (1803)?',a:'Marbury v. Madison established the principle of judicial review — the Supreme Court\'s power to strike down laws that violate the Constitution. Written by Chief Justice John Marshall, it is considered the most important decision in Supreme Court history.',section:'U.S. Supreme Court'},
+    {q:'What did Brown v. Board of Education (1954) decide?',a:'Brown v. Board of Education unanimously ruled that racial segregation in public schools was unconstitutional, overturning the separate-but-equal doctrine from Plessy v. Ferguson (1896). It was a landmark moment in the civil rights movement.',section:'U.S. Supreme Court'},
+    {q:'Who was Marie Curie and why does she matter historically?',a:'Marie Curie was a Polish-French physicist and chemist who discovered polonium and radium. She was the first woman to win a Nobel Prize, and the only person to win Nobel Prizes in two different sciences (Physics 1903, Chemistry 1911). She broke major barriers for women in science.',section:'Women Who Changed the World'},
+    {q:'Who was Harriet Tubman and what did she accomplish?',a:'Harriet Tubman escaped slavery and then made roughly 13 missions back to rescue approximately 70 enslaved people via the Underground Railroad. During the Civil War she served as a spy for the Union. She became one of the most important freedom fighters in American history.',section:'Women Who Changed the World'},
+    {q:'What is the relationship between Greek and Roman mythology?',a:'Roman mythology largely adopted Greek myths but renamed the gods. For example, Zeus became Jupiter, Athena became Minerva, Poseidon became Neptune, and Aphrodite became Venus. The Romans absorbed Greek religion as their empire expanded into the Mediterranean world.',section:'Greek & Roman Mythology'},
+    {q:'Who is Odysseus and why is he famous?',a:'Odysseus (Roman: Ulysses) is the hero of Homer\'s epic poem The Odyssey. He is renowned for his cleverness and cunning rather than pure physical strength. His 10-year journey home from Troy after the Trojan War is filled with encounters with monsters, gods, and temptation.',section:'Greek & Roman Mythology'},
+],
+  linguistics:[
+    {q:'What is a noun?',a:'A noun names a person, place, thing, or idea. Examples include teacher, Atlanta, freedom, and notebook.',section:'Parts of Speech'},
+    {q:'What is a verb?',a:'A verb shows action or a state of being. Run, write, is, and become are all verbs.',section:'Parts of Speech'},
+    {q:'What is the difference between an adjective and an adverb?',a:'An adjective modifies a noun or pronoun, while an adverb modifies a verb, adjective, or another adverb. In “the quick runner ran very quickly,” quick is an adjective and quickly is an adverb.',section:'Parts of Speech'},
+    {q:'What is a pronoun?',a:'A pronoun takes the place of a noun. Examples include he, she, it, they, who, and someone.',section:'Parts of Speech'},
+    {q:'What is a preposition?',a:'A preposition shows a relationship of place, time, direction, or other connection, usually before a noun or pronoun. Examples include in, on, under, between, and during.',section:'Parts of Speech'},
+    {q:'What is a conjunction?',a:'A conjunction connects words, phrases, or clauses. Common examples are and, but, or, because, although, and while.',section:'Parts of Speech'},
+    {q:'What is a sentence pattern?',a:'A sentence pattern is the structural arrangement of subject, verb, and other sentence parts. Common patterns include Subject-Verb, Subject-Verb-Direct Object, and Subject-Linking Verb-Predicate Noun.',section:'Sentence Structure'},
+    {q:'What is the difference between a simple, compound, and complex sentence?',a:'A simple sentence has one independent clause. A compound sentence has two or more independent clauses. A complex sentence has one independent clause and at least one dependent clause.',section:'Sentence Structure'},
+    {q:'What is an independent clause?',a:'An independent clause has a subject and verb and can stand alone as a complete sentence.',section:'Phrases and Clauses'},
+    {q:'What is a dependent clause?',a:'A dependent clause has a subject and verb but cannot stand alone as a complete sentence. It depends on an independent clause to make full sense.',section:'Phrases and Clauses'},
+    {q:'What is a phrase?',a:'A phrase is a group of related words that does not contain both a subject and a verb working together as a complete clause. Examples include in the morning and under the bridge.',section:'Phrases and Clauses'},
+    {q:'What is the difference between a predicate noun and a direct object?',a:'A predicate noun follows a linking verb and renames the subject, as in “Maria is the captain.” A direct object receives the action of an action verb, as in “Maria kicked the ball.”',section:'Functions and Usage'},
+  ],
 };
  
 // ============================================================
-// QUIZ DATA (Propaganda, Presidents, Current Events only)
+// QUIZ DATA
 // ============================================================
 const QUIZ_DATA={
   propaganda:[
@@ -1340,6 +1414,69 @@ const QUIZ_DATA={
     {q:'What is the "digital divide" and why does it matter?',section:'Technology',options:['The performance gap between old and new computers','The unequal access to internet and digital technology across income, geographic, and demographic lines','The difference between wired and wireless internet connections','The competition between major tech companies'],answer:1,explanation:'The digital divide is the gap in access to internet and digital tools between wealthy and lower-income populations, or between urban and rural areas. It matters because digital access is increasingly essential for education, employment, healthcare, and civic participation.'},
     {q:'Why is social media a concern for spreading misinformation?',section:'Technology',options:['Social media platforms are too slow for news to spread','Algorithms that maximize engagement tend to amplify sensational or false content, since it spreads faster than corrections','Social media reaches too few people to matter','Social media companies fact-check all posts before they are published'],answer:1,explanation:'Social media algorithms optimize for engagement (likes, shares). Sensational or emotionally charged content — including misinformation — tends to spread faster than dry factual corrections. This creates environments where false information can reach millions before being debunked.'},
   ],
+  theme:[
+    {q:'Who is the chief god in Norse mythology?',section:'Norse Mythology',options:['Thor','Loki','Odin','Freya'],answer:2,explanation:'Odin is the all-father and chief of the Norse gods, associated with wisdom, war, death, magic, and poetry.'},
+    {q:'What is Ragnarok?',section:'Norse Mythology',options:['A Norse feast celebrating harvest','The prophesied destruction of the gods and world, followed by rebirth','A sacred temple in Asgard','The name of Thor\'s hammer'],answer:1,explanation:'Ragnarok is the end-times battle where most gods fall, the world is destroyed, and then reborn.'},
+    {q:'Why was Washington, D.C. created as a federal district?',section:'Washington, D.C.',options:['To replace New York as the largest city','To keep the capital independent from any single state','To serve as a military base only','To collect state taxes'],answer:1,explanation:'The capital was set up as a federal district so no individual state would control the national government’s seat.'},
+    {q:'Which landmark is the seat of the legislative branch?',section:'Washington, D.C.',options:['White House','Supreme Court','U.S. Capitol','Washington Monument'],answer:2,explanation:'Congress meets in the U.S. Capitol, making it the center of the legislative branch.'},
+    {q:'Which musician is most commonly identified as a foundational rock and roll pioneer?',section:'History of Rock & Roll',options:['Johann Sebastian Bach','Chuck Berry','Frank Sinatra','John Philip Sousa'],answer:1,explanation:'Chuck Berry is widely recognized as one of the most influential early rock and roll artists because of his guitar style, songwriting, and performance energy.'},
+    {q:'Rock and roll developed most directly from what combination of earlier traditions?',section:'History of Rock & Roll',options:['Opera and military marches','Rhythm and blues, country, gospel, and blues','Jazz only','Folk ballads only'],answer:1,explanation:'Rock and roll emerged from a mix of Black and white musical traditions, especially rhythm and blues, country, gospel, and blues.'},
+    {q:'What best defines the Cold War?',section:'Cold War',options:['A war fought only in the Arctic','A direct full-scale war between the U.S. and USSR','A long geopolitical and ideological rivalry between the U.S. and Soviet Union','A trade dispute between Britain and France'],answer:2,explanation:'The Cold War was a decades-long rivalry involving ideology, arms buildup, diplomacy, espionage, and proxy conflict rather than direct total war between the two superpowers.'},
+    {q:'Why was the fall of the Berlin Wall significant?',section:'Cold War',options:['It began World War II','It symbolized the collapse of communist control in Eastern Europe','It created NATO','It divided Germany for the first time'],answer:1,explanation:'The wall’s fall in 1989 became one of the clearest symbols of the weakening of Soviet power in Europe.'},
+    {q:'What does the word “gilded” suggest in the Gilded Age?',section:'Gilded Age',options:['Completely honest government','A golden age with no problems','A shiny outer layer hiding deeper problems','A military dictatorship'],answer:2,explanation:'The phrase suggests wealth and glitter on the surface while corruption, inequality, and exploitation existed underneath.'},
+    {q:'Which issue was a major problem during the Gilded Age?',section:'Gilded Age',options:['No industrial growth','Severe labor conflict and inequality','The absence of immigration','The end of cities'],answer:1,explanation:'The era featured major labor struggles, monopolies, unsafe work, urban poverty, and large economic inequality alongside industrial growth.'},
+    {q:'Which development helped define the 1990s?',section:'The 1990s',options:['The rise of the internet','The start of the Civil War','The invention of the railroad','The fall of the Roman Empire'],answer:0,explanation:'The internet became one of the signature developments of the 1990s and helped reshape communication, business, and culture.'},
+    {q:'What global change helped shape the early 1990s?',section:'The 1990s',options:['The breakup of the Soviet Union','The founding of NATO','The War of 1812','The Great Depression'],answer:0,explanation:'The Soviet Union collapsed in 1991, ending the Cold War and reshaping global politics for the rest of the decade.'},
+    {q:'What is the primary function of the U.S. Supreme Court?',section:'U.S. Supreme Court',options:['Writing new laws','Commanding the military','Interpreting the Constitution and federal law','Collecting taxes'],answer:2,explanation:'The Supreme Court’s main role is to interpret the law and Constitution and to decide major legal disputes.'},
+    {q:'Why do Supreme Court decisions matter so much?',section:'U.S. Supreme Court',options:['They only affect Washington, D.C.','They can shape national rights and government power for generations','They are only advice to Congress','They choose presidents directly'],answer:1,explanation:'Landmark decisions influence civil rights, liberty, federal authority, and many other core parts of American life.'},
+    {q:'Which field would fit the topic “Women Who Changed the World”?',section:'Women Who Changed the World',options:['Only sports','Only mythology','Politics, science, activism, literature, and reform','Only military history'],answer:2,explanation:'The topic is intentionally broad and includes women whose impact reached politics, science, culture, reform movements, and more.'},
+    {q:'Why are women’s rights movements historically important?',section:'Women Who Changed the World',options:['They reduced access to education','They expanded political, legal, social, and economic opportunities','They ended all reform','They focused only on one country'],answer:1,explanation:'Women’s rights movements reshaped law and society by pressing for voting rights, education, workplace access, legal reform, and broader equality.'},
+    {q:'Why do Greek and Roman myths continue to be studied?',section:'Greek & Roman Mythology',options:['Because they are official law','Because they influence literature, art, language, and ideas about human nature','Because they replaced all history','Because they are all factually true biographies'],answer:1,explanation:'Classical myths remain important because they shaped later culture and still influence storytelling, symbolism, and language.'},
+    {q:'What is a common difference between a god and a hero in classical mythology?',section:'Greek & Roman Mythology',options:['Heroes always control nature','Gods are divine while heroes are usually mortal or semi-divine figures facing human struggle','Heroes are always villains','Gods cannot appear in stories'],answer:1,explanation:'Myths often contrast immortal divine power with heroic figures who are more limited, more vulnerable, and more human in their struggles.'},
+    // -- Additional Theme quiz questions --
+    {q:'Who is Loki in Norse mythology?',section:'Norse Mythology',options:['The god of thunder','The trickster god and shape-shifter','The god of wisdom','The god of war'],answer:1,explanation:'Loki is the Norse trickster god who causes mischief among the gods. He is the father of Fenrir, Jormungandr, and Hel.'},
+    {q:'Who is Freya in Norse mythology?',section:'Norse Mythology',options:['Goddess of the ocean and storms','Goddess of death and the underworld','Goddess of love, fertility, and war','Goddess of harvest and winter'],answer:2,explanation:'Freya is associated with love, fertility, and also war and death. She receives half of the fallen warriors in her hall Folkvangr.'},
+    {q:'What gave Washington, D.C. residents the right to vote for president?',section:'Washington, D.C.',options:['The Bill of Rights','The 23rd Amendment','The Civil Rights Act','The 15th Amendment'],answer:1,explanation:'The 23rd Amendment (1961) extended presidential voting rights to D.C. residents, though the district still has no voting representation in Congress.'},
+    {q:'Which building on the National Mall honors Lincoln with inscriptions of his major speeches?',section:'Washington, D.C.',options:['Washington Monument','Jefferson Memorial','Lincoln Memorial','Capitol Building'],answer:2,explanation:'The Lincoln Memorial features a massive seated statue and has the Gettysburg Address and Second Inaugural Address inscribed on its walls.'},
+    {q:'Who is often called the "King of Rock and Roll"?',section:'History of Rock & Roll',options:['Chuck Berry','Little Richard','Elvis Presley','Buddy Holly'],answer:2,explanation:'Elvis Presley earned the title by fusing country, gospel, and R&B into a powerful style that defined early rock and roll and made him a global cultural icon.'},
+    {q:'What was the British Invasion?',section:'History of Rock & Roll',options:['A British ban on American music in the 1950s','The wave of British rock acts, led by the Beatles, that swept the U.S. in the mid-1960s','The British government\'s plan to tax American rock albums','A music festival held in London'],answer:1,explanation:'The British Invasion proved rock and roll had become global. The Beatles led the wave, transforming American pop music almost overnight.'},
+    {q:'What was the Cuban Missile Crisis?',section:'Cold War',options:['The U.S. invasion of Cuba in 1961','A 13-day standoff in 1962 when the Soviet Union placed nuclear missiles in Cuba','A Cuban economic embargo begun in 1960','The assassination of Cuban leader Fidel Castro'],answer:1,explanation:'In October 1962, discovery of Soviet nuclear missiles in Cuba brought the U.S. and USSR to the brink of nuclear war. Negotiation resolved the crisis after 13 days.'},
+    {q:'Which Cold War conflict (1950-1953) ended in an armistice rather than a peace treaty?',section:'Cold War',options:['Vietnam War','Korean War','Berlin Blockade','Bay of Pigs'],answer:1,explanation:'The Korean War ended with an armistice, not a formal peace treaty. The peninsula remains divided along roughly the same line as before the war.'},
+    {q:'Which term describes wealthy Gilded Age industrialists who built monopolies through aggressive tactics?',section:'Gilded Age',options:['Muckrakers','Robber Barons','Progressives','Suffragists'],answer:1,explanation:'Robber Barons like Rockefeller (oil), Carnegie (steel), and Morgan (banking) built enormous wealth but were criticized for monopolistic practices and exploiting workers.'},
+    {q:'What was the Homestead Strike?',section:'Gilded Age',options:['A strike by farmers against railroad companies','A violent 1892 labor conflict at Carnegie\'s steel plant in Pennsylvania','A miners strike in West Virginia','A textile workers strike in Massachusetts'],answer:1,explanation:'The Homestead Strike of 1892 was one of the most significant labor confrontations of the Gilded Age, ending badly for the workers and setting back the labor movement.'},
+    {q:'What was NAFTA?',section:'The 1990s',options:['A NATO military alliance formed in 1993','A trade agreement eliminating most barriers between the U.S., Canada, and Mexico','A nuclear arms reduction treaty','A U.S.-European trade deal'],answer:1,explanation:'NAFTA (1993) reduced trade barriers across North America. It boosted trade but was criticized for moving manufacturing jobs to lower-wage Mexico.'},
+    {q:'What was a major domestic crisis during Clinton\'s presidency?',section:'The 1990s',options:['The Oklahoma City Bombing led to his resignation','He was impeached by the House over the Monica Lewinsky scandal, then acquitted by the Senate','He was convicted of obstruction of justice','He resigned before the end of his second term'],answer:1,explanation:'Clinton was impeached by the House in 1998 but acquitted by the Senate. He completed his second term and left office with high approval ratings.'},
+    {q:'What did Marbury v. Madison establish?',section:'U.S. Supreme Court',options:['The right to an attorney in criminal cases','Judicial review — the Supreme Court\'s power to strike down unconstitutional laws','Equal protection under state law','The right to remain silent when arrested'],answer:1,explanation:'Marbury v. Madison (1803) is the foundational case for judicial review, giving the Supreme Court the power to invalidate acts of Congress that violate the Constitution.'},
+    {q:'What did Brown v. Board of Education rule?',section:'U.S. Supreme Court',options:['Schools must teach civics','Racial segregation in public schools is unconstitutional','Prayer in schools is protected speech','States can set their own education standards'],answer:1,explanation:'Brown v. Board (1954) overturned Plessy v. Ferguson\'s "separate but equal" doctrine and was a landmark victory for the civil rights movement.'},
+    {q:'In which two different sciences did Marie Curie win Nobel Prizes?',section:'Women Who Changed the World',options:['Biology and Chemistry','Physics and Chemistry','Chemistry and Medicine','Physics and Biology'],answer:1,explanation:'Curie won the Nobel Prize in Physics in 1903 and in Chemistry in 1911 — the only person ever to win Nobel Prizes in two different sciences.'},
+    {q:'What is Harriet Tubman best known for?',section:'Women Who Changed the World',options:['Writing the first abolitionist novel','Leading approximately 70 enslaved people to freedom via the Underground Railroad','Founding the NAACP','Leading the women\'s suffrage movement'],answer:1,explanation:'Tubman made roughly 13 dangerous missions south to rescue around 70 people. She later served as a Union spy during the Civil War.'},
+    {q:'How did Roman mythology relate to Greek mythology?',section:'Greek & Roman Mythology',options:['Romans invented their own completely original myths','Romans adopted Greek myths and renamed the gods (Zeus became Jupiter, etc.)','Roman myths were older than Greek myths','The two mythologies had no connection'],answer:1,explanation:'Rome absorbed Greek religion as it expanded into the Mediterranean world, renaming the Greek gods: Zeus/Jupiter, Athena/Minerva, Poseidon/Neptune, Aphrodite/Venus.'},
+    {q:'What is Odysseus known for in Greek mythology?',section:'Greek & Roman Mythology',options:['His superhuman strength in battle','His cunning and cleverness, and his 10-year journey home after the Trojan War','Founding the city of Athens','Slaying the Minotaur'],answer:1,explanation:'Odysseus (Roman: Ulysses) is the hero of The Odyssey, famous for his wit rather than brute force. His decade-long voyage home from Troy is one of the greatest adventure narratives in Western literature.'},
+
+  ],
+  linguistics:[
+    {q:'Which word is a pronoun?',section:'Parts of Speech',options:['quickly','they','under','bright'],answer:1,explanation:'They is a pronoun because it replaces a noun. Quickly is an adverb, under is usually a preposition, and bright is commonly an adjective.'},
+    {q:'Which word in the sentence “The red kite flew high” is an adjective?',section:'Parts of Speech',options:['flew','high','red','kite'],answer:2,explanation:'Red is the adjective because it modifies the noun kite.'},
+    {q:'Which sentence is compound?',section:'Sentence Structure',options:['The bell rang.','Although it was raining, we played outside.','The bell rang, and the students rushed out.','Running quickly, Maya reached the bus.'],answer:2,explanation:'A compound sentence contains two independent clauses joined by a coordinating conjunction. “The bell rang” and “the students rushed out” can both stand alone.'},
+    {q:'Which group of words is a dependent clause?',section:'Phrases and Clauses',options:['after the movie','because she studied','the noisy classroom','they laughed loudly'],answer:1,explanation:'Because she studied has a subject and verb, but it cannot stand alone as a complete sentence, so it is a dependent clause.'},
+    {q:'Which sentence uses a predicate noun?',section:'Functions and Usage',options:['The coach praised Maya.','Maya ran quickly.','Maya is the captain.','The captain chose Maya.'],answer:2,explanation:'In “Maya is the captain,” captain follows a linking verb and renames the subject, making it a predicate noun.'},
+    {q:'Which word is a preposition?',section:'Parts of Speech',options:['during','jumped','happy','they'],answer:0,explanation:'During is a preposition. It shows a time relationship, as in “during class.”'},
+    {q:'Which sentence is complex?',section:'Sentence Structure',options:['I opened the door.','I opened the door, and he walked in.','When I opened the door, he walked in.','Open the door now.'],answer:2,explanation:'A complex sentence contains one independent clause and at least one dependent clause. “When I opened the door” is dependent, while “he walked in” is independent.'},
+    {q:'Which choice is a phrase rather than a clause?',section:'Phrases and Clauses',options:['while the band played','the birds sang','under the bridge','she wrote'],answer:2,explanation:'Under the bridge is a phrase because it does not contain both a subject and a verb acting together as a complete clause.'},
+    // ── Additional LinguiSHTIK quiz questions ──
+    {q:'Which word in "She ran very quickly" is an adverb modifying another adverb?',section:'Parts of Speech',options:['She','ran','very','quickly'],answer:2,explanation:'"Very" is an adverb modifying the adverb "quickly." Adverbs can modify verbs, adjectives, or other adverbs.'},
+    {q:'Which word is a conjunction in "Maria studied hard but still failed"?',section:'Parts of Speech',options:['Maria','studied','but','failed'],answer:2,explanation:'"But" is a coordinating conjunction connecting the two clauses. Coordinating conjunctions join words, phrases, or independent clauses of equal rank.'},
+    {q:'Which word is an interjection?',section:'Parts of Speech',options:['run','Wow','under','quickly'],answer:1,explanation:'"Wow" is an interjection — a word or phrase that expresses strong emotion, usually set off by an exclamation mark or comma.'},
+    {q:'What sentence pattern does "Maria is a doctor" follow?',section:'Sentence Structure',options:['Subject-Verb','Subject-Verb-Direct Object','Subject-Linking Verb-Predicate Noun','Subject-Verb-Predicate Adjective'],answer:2,explanation:'"Doctor" follows a linking verb and renames the subject, making the pattern Subject-Linking Verb-Predicate Noun (SLV-PN).'},
+    {q:'What sentence purpose is "Please sit down"?',section:'Sentence Structure',options:['Declarative','Interrogative','Imperative','Exclamatory'],answer:2,explanation:'An imperative sentence gives a command or makes a request. The subject "you" is implied but not stated.'},
+    {q:'Which sentence is declarative?',section:'Sentence Structure',options:['Did the dog eat?','The dog ate the sandwich.','Eat the sandwich!','What a huge dog!'],answer:1,explanation:'A declarative sentence makes a statement. It ends with a period and has a stated subject.'},
+    {q:'Which group of words is an adjective phrase?',section:'Phrases and Clauses',options:['She ran quickly','The book on the shelf','Because it was raining','They laughed'],answer:1,explanation:'"The book on the shelf" — "on the shelf" is a prepositional phrase that modifies the noun "book," making it an adjective phrase (adjective use of a phrase).'},
+    {q:'Which is an adverb clause?',section:'Phrases and Clauses',options:['the noisy crowd','after the game ended','the winning team','a difficult question'],answer:1,explanation:'"After the game ended" has a subject and verb and is introduced by a subordinating conjunction. It modifies a verb and tells when, so it functions as an adverb clause.'},
+    {q:'What is an indirect object?',section:'Functions and Usage',options:['The noun that receives the action directly','The noun that tells to whom or for whom the action is done','A noun that renames the subject','A noun that follows a preposition'],answer:1,explanation:'An indirect object tells to whom or for whom the action of the verb is done. In "She gave Marcus the book," Marcus is the indirect object.'},
+    {q:'What is an appositive?',section:'Functions and Usage',options:['A verb in passive voice','A noun or noun phrase that renames or identifies the noun next to it','An adverb modifying an adjective','A dependent clause'],answer:1,explanation:'An appositive renames the noun next to it. In "My friend Sofia, a skilled pianist, performed first," "a skilled pianist" is an appositive renaming Sofia.'},
+    {q:'Which word is a verb in "The tired students slowly entered the crowded classroom"?',section:'Parts of Speech',options:['tired','slowly','entered','crowded'],answer:2,explanation:'"Entered" is the action verb. "Tired" and "crowded" are adjectives, and "slowly" is an adverb.'},
+    {q:'What is a gerund?',section:'Functions and Usage',options:['A verb form used as an adjective','A verb form ending in -ing used as a noun','A connecting word between clauses','A type of dependent clause'],answer:1,explanation:'A gerund is a verb form ending in -ing that functions as a noun. In "Swimming is great exercise," swimming is a gerund serving as the subject.'},
+  ],
 };
  
 // ============================================================
@@ -1397,6 +1534,23 @@ function getSections(subject){
     {key:'World Affairs',label:'World Affairs'},
     {key:'Science',label:'Science'},
     {key:'Technology',label:'Technology'},
+  ];
+  if(subject==='theme') return [
+    {key:'Norse Mythology',label:'Norse Mythology'},
+    {key:'Washington, D.C.',label:'Washington, D.C.'},
+    {key:'History of Rock & Roll',label:'Rock & Roll'},
+    {key:'Cold War',label:'Cold War'},
+    {key:'Gilded Age',label:'Gilded Age'},
+    {key:'The 1990s',label:'The 1990s'},
+    {key:'U.S. Supreme Court',label:'Supreme Court'},
+    {key:'Women Who Changed the World',label:'Women Changed World'},
+    {key:'Greek & Roman Mythology',label:'Greek & Roman Myth'},
+  ];
+  if(subject==='linguistics') return [
+    {key:'Parts of Speech',label:'Parts of Speech'},
+    {key:'Sentence Structure',label:'Sentence Structure'},
+    {key:'Phrases and Clauses',label:'Phrases & Clauses'},
+    {key:'Functions and Usage',label:'Functions'},
   ];
   if(subject==='presidents') return [
     {key:'1-17',label:'Presidents 1\u201317'},
@@ -1560,7 +1714,9 @@ function renderReference(){
   if(currentSubject==='propaganda') return renderPropRef();
   if(currentSubject==='presidents') return renderPresRef();
   if(currentSubject==='currentevents') return renderCERef();
-  return `<div class="ask-ai-box"><p style="color:var(--text-tertiary);text-align:center;padding:20px">Reference not available in this mode for this subject. Use Ask AI for Equations.</p></div>`;
+  if(currentSubject==='theme') return renderThemeRef();
+  if(currentSubject==='linguistics') return renderLingRef();
+  return `<div class="ask-ai-box"><p style="color:var(--text-tertiary);text-align:center;padding:20px">Reference not available for this subject.</p></div>`;
 }
  
 // ——— PROPAGANDA: 6 section boxes → technique list → detail ———
@@ -1724,6 +1880,60 @@ function renderCERef(){
         <a class="source-card" href="https://politifact.com" target="_blank"><div class="source-name">PolitiFact</div><div class="source-desc">Pulitzer Prize-winning fact-checking of political statements and current events claims.</div><span class="source-tag">Fact-Check</span></a>
         <a class="source-card" href="https://snopes.com" target="_blank"><div class="source-name">Snopes</div><div class="source-desc">The original internet fact-checker. Debunks viral misinformation and hoaxes quickly.</div><span class="source-tag">Fact-Check</span></a>
         <a class="source-card" href="https://mediabiasfactcheck.com" target="_blank"><div class="source-name">Media Bias/Fact Check</div><div class="source-desc">Rates hundreds of outlets on bias and factual accuracy. Use to evaluate your sources.</div><span class="source-tag">Media Literacy</span></a>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderThemeRef(){
+  return `<div class="card-area">
+    <div class="sources-intro">
+      <strong>📜 Theme Reference</strong><br>
+      Each section is a Theme topic. Use the section buttons to drill one topic at a time, just like Propaganda sections.
+    </div>
+    <div class="source-category">
+      <div class="source-cat-label">Theme Topics</div>
+      <div class="source-cards">
+        <div class="source-card"><div class="source-name">Norse Mythology</div><div class="source-desc">Study major gods (Odin, Thor, Loki, Freya), creatures, the Nine Worlds, Yggdrasil, Ragnarok, and the lasting cultural impact of Norse myths. <em>Current year topic.</em></div><span class="source-tag">Current</span></div>
+        <div class="source-card"><div class="source-name">Washington, D.C.</div><div class="source-desc">Study the capital as the seat of federal power: major buildings, monuments, branches of government, and why it is a federal district not a state.</div><span class="source-tag">Civics</span></div>
+        <div class="source-card"><div class="source-name">History of Rock &amp; Roll</div><div class="source-desc">Know major pioneers (Chuck Berry, Elvis, Beatles), musical roots (R&amp;B, blues, country), cultural impact, youth culture, and how rock reshaped American society.</div><span class="source-tag">Music History</span></div>
+        <div class="source-card"><div class="source-name">Cold War</div><div class="source-desc">Review superpower rivalry, containment, nuclear tension, Berlin Wall, proxy conflicts, and the collapse of the Soviet Union.</div><span class="source-tag">History</span></div>
+        <div class="source-card"><div class="source-name">Gilded Age</div><div class="source-desc">Focus on industrial growth, monopolies, immigration, labor conflict, urbanization, political corruption, and reform responses.</div><span class="source-tag">History</span></div>
+        <div class="source-card"><div class="source-name">The 1990s</div><div class="source-desc">Study the internet, post-Cold War world, globalization, Clinton presidency, major cultural shifts, and how technology changed daily life.</div><span class="source-tag">History</span></div>
+        <div class="source-card"><div class="source-name">U.S. Supreme Court</div><div class="source-desc">Focus on constitutional interpretation, landmark cases (Brown, Miranda, Marbury), judicial review, civil rights, and the Court's role in American government.</div><span class="source-tag">Civics</span></div>
+        <div class="source-card"><div class="source-name">Women Who Changed the World</div><div class="source-desc">Know influential women from politics, science, activism, literature, and culture, along with the movements that expanded women's opportunities globally.</div><span class="source-tag">History</span></div>
+        <div class="source-card"><div class="source-name">Greek &amp; Roman Mythology</div><div class="source-desc">Review major gods, heroes, myths, symbols, and the lasting influence of classical mythology on art, language, and literature.</div><span class="source-tag">Mythology</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+function renderLingRef(){
+  return `<div class="card-area">
+    <div class="sources-intro">
+      <strong>📝 LinguiSHTIK Reference</strong><br>
+      Based on the SA Academic Games Club documents page and AGLOA LinguiSHTIK rules, handbook, and worksheet lists. This section now emphasizes the grammar topics named in the official materials rather than the tournament procedure itself.
+    </div>
+    <div class="source-category">
+      <div class="source-cat-label">Core Grammar Topics</div>
+      <div class="source-cards">
+        <div class="source-card"><div class="source-name">Parts of Speech</div><div class="source-desc">AGLOA materials specifically build from nouns, verbs, adjectives, adverbs, prepositions, and interjections, then add pronouns and conjunctions in higher divisions.</div><span class="source-tag">Foundation</span></div>
+        <div class="source-card"><div class="source-name">Sentence Patterns And Structures</div><div class="source-desc">The worksheet list includes sentence patterns, sentence structures, and sentence purposes. Players should recognize how subject, verb, object, complements, and clause types fit together.</div><span class="source-tag">Structure</span></div>
+        <div class="source-card"><div class="source-name">Functions, Clauses, And Phrases</div><div class="source-desc">Official worksheets also cover noun functions, verb functions, clauses, and phrases. These are core content topics, not just technical rules for judges.</div><span class="source-tag">Advanced Grammar</span></div>
+      </div>
+    </div>
+    <div class="source-category">
+      <div class="source-cat-label">What To Know Cold</div>
+      <div class="source-cards">
+        <div class="source-card"><div class="source-name">Identification</div><div class="source-desc">Be able to identify the part of speech of a word inside a sentence, not just in isolation. LinguiSHTIK demands often depend on grammatical function within context.</div><span class="source-tag">Skill</span></div>
+        <div class="source-card"><div class="source-name">Sentence Building</div><div class="source-desc">Practice turning grammar knowledge into real sentences. The game rewards students who can satisfy structure, function, and word-formation demands at the same time.</div><span class="source-tag">Application</span></div>
+        <div class="source-card"><div class="source-name">Functions Matter</div><div class="source-desc">A noun can act as a subject, direct object, predicate noun, or object of a preposition. A strong player studies grammatical function, not just labels.</div><span class="source-tag">Usage</span></div>
+      </div>
+    </div>
+    <div class="source-category">
+      <div class="source-cat-label">Why These Topics</div>
+      <div class="source-cards">
+        <div class="source-card"><div class="source-name">Official Worksheet List</div><div class="source-desc">The AGLOA documents page explicitly lists worksheets for parts of speech, sentence patterns, sentence structures, noun functions, pronoun functions, verb functions, clauses, and phrases. Those listed topics define the safest content focus for this app.</div><span class="source-tag">Source Basis</span></div>
+        <div class="source-card"><div class="source-name">Division Note</div><div class="source-desc">AGLOA also notes that topic distribution changed in 2024 and 2025. The exact mix by division can shift, but the core grammar concepts above remain central across official materials.</div><span class="source-tag">2024-25 Updates</span></div>
       </div>
     </div>
   </div>`;
@@ -2287,60 +2497,49 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 
 function openFeedback(){
   document.getElementById('feedback-text').value='';
-  document.getElementById('feedback-file').value='';
-  document.getElementById('feedback-file-name').textContent='';
   document.getElementById('feedback-form-err').className='feedback-form-err';
   document.getElementById('feedback-overlay').classList.add('show');
 }
 function closeFeedback(){document.getElementById('feedback-overlay').classList.remove('show');}
 function closeFeedbackBackdrop(e){if(e.target===document.getElementById('feedback-overlay'))closeFeedback();}
 
-function updateFeedbackFileLabel(input){
-  const name=input.files[0]?input.files[0].name:'';
-  document.getElementById('feedback-file-name').textContent=name?'📎 '+name:'';
-}
-
 function submitFeedback(){
   const msg=document.getElementById('feedback-text').value.trim();
   const errEl=document.getElementById('feedback-form-err');
   if(!msg){errEl.textContent='Please write something before sending.';errEl.className='feedback-form-err show';return;}
   errEl.className='feedback-form-err';
-  const fileInput=document.getElementById('feedback-file');
-  const file=fileInput.files[0];
   const u=getUser();
   const parts=(u&&u.name)?u.name.trim().split(/\s+/):['-'];
   const firstName=parts[0];
   const lastInitial=parts.length>1?parts[parts.length-1][0].toUpperCase()+'.':'';
   const displayName=lastInitial?`${firstName} ${lastInitial}`:firstName;
-  const saveEntry=(attachment)=>{
-    const fb=getFeedback();
-    fb.push({
-      id:genId(),
+  const ts=Date.now();
+  const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const localEntry={
+    id:genId(),
+    name:displayName,
+    email:u?u.email:'',
+    message:msg,
+    date,ts,
+    read:false,
+    userNotified:false
+  };
+  const fb=getFeedback();
+  fb.push(localEntry);
+  saveFeedback(fb);
+  if(window._fbReady && window._fbAddFeedback){
+    window._fbAddFeedback({
       name:displayName,
       email:u?u.email:'',
       message:msg,
-      attachment:attachment||null,
-      date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}),
-      ts:Date.now(),
-      read:false,
-      userNotified:false
-    });
-    saveFeedback(fb);
-    closeFeedback();
-    const toast=document.getElementById('feedback-toast');
-    toast.classList.add('show');
-    setTimeout(()=>toast.classList.remove('show'),4500);
-  };
-  if(file){
-    const MAX=2*1024*1024; // 2 MB limit for localStorage safety
-    if(file.size>MAX){errEl.textContent='Image is too large (max 2 MB). Please choose a smaller file.';errEl.className='feedback-form-err show';return;}
-    const reader=new FileReader();
-    reader.onload=e=>saveEntry(e.target.result);
-    reader.onerror=()=>saveEntry(null);
-    reader.readAsDataURL(file);
-  } else {
-    saveEntry(null);
+      date,ts,
+      read:false
+    }).catch(e=>console.warn('Firestore feedback write failed',e));
   }
+  closeFeedback();
+  const toast=document.getElementById('feedback-toast');
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'),4500);
 }
 
 // Admin panel
@@ -2351,38 +2550,65 @@ function openAdminPanel(){
 function closeAdminPanel(){document.getElementById('admin-panel-overlay').classList.remove('show');}
 function closeAdminPanelBackdrop(e){if(e.target===document.getElementById('admin-panel-overlay'))closeAdminPanel();}
 
-function renderAdminFeedbackList(){
-  const fb=getFeedback().slice().sort((a,b)=>{
-    // Unread comes before read; within same read-state, newer first
-    if(a.read!==b.read) return a.read?1:-1;
-    return b.ts-a.ts;
-  });
+async function renderAdminFeedbackList(){
   const listEl=document.getElementById('admin-fb-list');
   const countEl=document.getElementById('admin-unread-count');
   if(!listEl) return;
+  listEl.innerHTML='<div class="admin-fb-empty">Loading…</div>';
+  let fb=[];
+  let source='local';
+  if(window._fbReady && window._fbGetFeedback){
+    try{
+      fb=await window._fbGetFeedback();
+      source='cloud';
+    }catch(e){
+      console.warn('Firestore read failed, using local',e);
+      fb=getFeedback();
+    }
+  } else {
+    fb=getFeedback();
+  }
+  fb=fb.slice().sort((a,b)=>{
+    if(a.read!==b.read) return a.read?1:-1;
+    return (b.ts||0)-(a.ts||0);
+  });
   const unread=fb.filter(f=>!f.read).length;
   if(countEl) countEl.textContent=unread?unread+' unread':'';
-  if(!fb.length){listEl.innerHTML='<div class="admin-fb-empty">No feedback submitted yet.</div>';return;}
+  if(!fb.length){listEl.innerHTML=`<div class="admin-fb-empty">No feedback yet. <small style="opacity:0.6">(${source})</small></div>`;return;}
   listEl.innerHTML=fb.map(f=>`
     <div class="admin-fb-entry ${f.read?'admin-fb-read':'admin-fb-unread'}" id="afb-${f.id}">
       <div class="admin-fb-meta">
         <span class="admin-fb-name">${escHtml(f.name||'Anonymous')}</span>
         <span class="admin-fb-email">${escHtml(f.email||'')}</span>
-        <span class="admin-fb-date">${escHtml(f.date)}</span>
+        <span class="admin-fb-date">${escHtml(f.date||'')}</span>
         ${f.read?'<span class="admin-fb-badge read-badge">Read</span>':'<span class="admin-fb-badge unread-badge">Unread</span>'}
       </div>
       <div class="admin-fb-message">${escHtml(f.message)}</div>
-      ${f.attachment?`<img src="${f.attachment}" class="admin-fb-thumb" alt="Screenshot" onclick="window.open(this.src,'_blank')" />`:''}
+
       ${!f.read?`<button class="btn btn-secondary admin-fb-mark-btn" onclick="markFeedbackRead('${escHtml(f.id)}')">✓ Mark as Read</button>`:''}
     </div>
   `).join('');
 }
 
 function markFeedbackRead(id){
+  // Update in Firestore if available
+  if(window._fbReady && window._fbMarkFeedbackRead){
+    window._fbMarkFeedbackRead(id)
+      .then(()=>renderAdminFeedbackList())
+      .catch(e=>{
+        console.warn('Firestore mark-read failed',e);
+        renderAdminFeedbackList();
+      });
+  } else {
+    const fb=getFeedback();
+    const entry=fb.find(f=>f.id===id);
+    if(entry){entry.read=true;saveFeedback(fb);}
+    renderAdminFeedbackList();
+  }
+  // Also update local copy
   const fb=getFeedback();
   const entry=fb.find(f=>f.id===id);
   if(entry){entry.read=true;saveFeedback(fb);}
-  renderAdminFeedbackList();
 }
 
 // Called on sign-in to show "your feedback was reviewed" notification
@@ -2424,4 +2650,4 @@ if(!startUser){
 </script>
 </body>
 </html>
- 
+//===============================================================================================
