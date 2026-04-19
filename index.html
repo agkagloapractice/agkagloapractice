@@ -661,19 +661,6 @@
         <div class="settings-group">
           <div class="settings-row">
             <div class="settings-row-left">
-              <div class="settings-row-title">Save Progress Locally</div>
-              <div class="settings-row-desc">Store stats and settings in your browser</div>
-            </div>
-            <div class="settings-row-right">
-              <label class="toggle">
-                <input type="checkbox" id="toggle-save-local" checked onchange="savePrefs()" />
-                <div class="toggle-track"></div>
-                <div class="toggle-thumb"></div>
-              </label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-left">
               <div class="settings-row-title">Delete All Data</div>
               <div class="settings-row-desc">Wipe all local data and reset the app</div>
             </div>
@@ -953,7 +940,10 @@ onAuthStateChanged(_auth, async fbUser => {
       isGuest: false,
       uid: fbUser.uid
     };
-    // Only auto-restore if nothing is already stored for this session
+    // Restore cloud stats/prefs so local cache matches this account
+    if(cloud.stats) localStorage.setItem('agk_stats', JSON.stringify(cloud.stats));
+    if(cloud.prefs) localStorage.setItem('agk_prefs', JSON.stringify(cloud.prefs));
+    // Only auto-restore identity if nothing is already stored for this session
     const stored = (() => { try{ return JSON.parse(localStorage.getItem('agk_user')); } catch(e){ return null; } })();
     if(!stored || stored.email !== fbUser.email){
       localStorage.setItem('agk_user', JSON.stringify(merged));
@@ -2952,10 +2942,9 @@ const STATS_KEY='agk_stats';
 function getUser(){try{return JSON.parse(localStorage.getItem(AUTH_KEY))||null;}catch(e){return null;}}
 function saveUser(u){localStorage.setItem(AUTH_KEY,JSON.stringify(u));}
 function getPrefs(){try{return JSON.parse(localStorage.getItem(PREFS_KEY))||{};}catch(e){return {};}}
-function savePrefsData(p){localStorage.setItem(PREFS_KEY,JSON.stringify(p));}
-function getStats(){try{return JSON.parse(localStorage.getItem(STATS_KEY))||{sessions:0,cards:0,correct:0,streak:0,lastDate:''};}catch(e){return {sessions:0,cards:0,correct:0,streak:0,lastDate:''};}}
-function saveStatsData(s){localStorage.setItem(STATS_KEY,JSON.stringify(s));}
-
+function savePrefsData(p){localStorage.setItem(PREFS_KEY,JSON.stringify(p));const u=getUser();if(u&&u.uid&&window._fbReady&&window._fbSaveProfile)window._fbSaveProfile({prefs:p}).catch(()=>{});}
+function getStats(){try{return JSON.parse(localStorage.getItem(STATS_KEY))||{sessions:0,cards:0,correct:0,streak:0,lastDate:''};}catch(e){return {sessions:0,cards:0,correct:0,streak:0,lastDate:''};}}  
+function saveStatsData(s){localStorage.setItem(STATS_KEY,JSON.stringify(s));const u=getUser();if(u&&u.uid&&window._fbReady&&window._fbSaveProfile)window._fbSaveProfile({stats:s}).catch(()=>{});}
 function switchAuthTab(tab){
   document.getElementById('auth-tab-signin').classList.toggle('active',tab==='signin');
   document.getElementById('auth-tab-signup').classList.toggle('active',tab==='signup');
@@ -2983,6 +2972,8 @@ function handleSignIn(){
   if(window._fbReady && window._fbSignIn){
     window._fbSignIn(email,pw).then(({fbUser,cloud})=>{
       const user={email,name:cloud.name||fbUser.displayName||'User',photo:cloud.photo||null,isGuest:false,uid:fbUser.uid};
+      if(cloud.stats) localStorage.setItem(STATS_KEY,JSON.stringify(cloud.stats));
+      if(cloud.prefs) localStorage.setItem(PREFS_KEY,JSON.stringify(cloud.prefs));
       signInUser(user);
     }).catch(e=>{
       if(btn){btn.disabled=false;btn.textContent='Sign In →';}
@@ -3067,6 +3058,8 @@ function signInUser(user){
 function handleSignOut(){
   if(!confirm('Sign out of your account?')) return;
   localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(STATS_KEY);
+  localStorage.removeItem(PREFS_KEY);
   if(window._fbReady && window._fbSignOut) window._fbSignOut().catch(()=>{});
   closeSettings();
   showAuthOverlay();
@@ -3214,7 +3207,6 @@ function savePrefs(){
     quizOrder:document.getElementById('select-quiz-order')?.value||'random',
     sounds:document.getElementById('toggle-sounds')?.checked||false,
     explanations:document.getElementById('toggle-explanations')?.checked??true,
-    saveLocal:document.getElementById('toggle-save-local')?.checked??true,
     accent:document.getElementById('color-swatches')?.dataset.accent||'#007AFF',
     accentGrad:document.getElementById('color-swatches')?.dataset.accentGrad||'#5AC8FA',
   };
@@ -3233,7 +3225,6 @@ function loadPrefsToUI(){
   set('select-quiz-order',p.quizOrder||'random');
   set('toggle-sounds',p.sounds||false);
   set('toggle-explanations',p.explanations??true);
-  set('toggle-save-local',p.saveLocal??true);
   // Accent
   if(p.accent){
     applyAccentColor(p.accent,p.accentGrad||'#5AC8FA');
