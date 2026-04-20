@@ -184,16 +184,16 @@
   .header-actions{display:flex;gap:8px;align-items:center}
   .help-menu-wrap,.notif-menu-wrap{position:relative}
   .user-chip{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 7px;border-radius:20px;background:rgba(255,255,255,0.55);border:1.5px solid var(--glass-border);cursor:pointer;transition:all 0.2s;font-size:13px;font-weight:600;color:var(--text-primary)}
-  .user-chip:hover{background:rgba(255,255,255,0.85)}
+  .user-chip:hover{background:rgba(255,255,255,0.85);transform:translateY(-2px) translateX(1px);box-shadow:0 8px 18px rgba(0,0,0,0.08)}
   .user-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0}
   .settings-btn,.help-btn,.notif-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.55);border:1.5px solid var(--glass-border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;font-size:17px;flex-shrink:0}
   .settings-btn:hover,.help-btn:hover,.notif-btn:hover{background:rgba(255,255,255,0.85)}
   .settings-btn:hover{transform:rotate(30deg)}
   .help-btn{font-size:15px;font-weight:800;color:var(--text-primary);position:relative}
-  .help-btn:hover{transform:translateY(-1px)}
+  .help-btn:hover{transform:translateY(-2px) rotate(-10deg);box-shadow:0 8px 18px rgba(0,122,255,0.16)}
   .help-btn.active{background:linear-gradient(135deg,rgba(0,122,255,0.18),rgba(175,82,222,0.16));border-color:rgba(0,122,255,0.22)}
   .notif-btn{font-size:16px;color:var(--text-primary);position:relative}
-  .notif-btn:hover{transform:translateY(-1px)}
+  .notif-btn:hover{transform:translateY(-2px) rotate(10deg);box-shadow:0 8px 18px rgba(255,149,0,0.18)}
   .notif-btn.active{background:linear-gradient(135deg,rgba(255,149,0,0.16),rgba(255,59,48,0.12));border-color:rgba(255,149,0,0.22)}
   .notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:999px;background:linear-gradient(135deg,#FF3B30,#FF9500);color:#fff;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 4px 10px rgba(255,59,48,0.28)}
   .notif-badge.show{display:flex}
@@ -350,7 +350,7 @@
 
   /* ===== FEEDBACK ===== */
   .feedback-btn{width:34px;height:34px;border-radius:50%;border:1.5px solid rgba(0,0,0,0.08);background:rgba(255,255,255,0.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;transition:all 0.18s;flex-shrink:0;padding:0}
-  .feedback-btn:hover{background:rgba(255,255,255,0.85);transform:scale(1.08)}
+  .feedback-btn:hover{background:rgba(255,255,255,0.85);transform:translateY(-2px) rotate(8deg);box-shadow:0 8px 18px rgba(0,0,0,0.12)}
   .feedback-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:1600;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity 0.22s}
   .feedback-overlay.show{opacity:1;pointer-events:all}
   .feedback-modal{background:rgba(255,255,255,0.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1.5px solid rgba(255,255,255,0.7);border-radius:24px;width:100%;max-width:480px;box-shadow:0 24px 60px rgba(0,0,0,0.18);overflow:hidden}
@@ -761,7 +761,7 @@
           <div class="settings-row">
             <div class="settings-row-left">
               <div class="settings-row-title">Built By Adithan G.</div>
-              <div class="settings-row-desc">AGK OS 1.7.9</div>
+              <div class="settings-row-desc">AGK OS 1.7.11</div>
             </div>
           </div>
         </div>
@@ -2849,9 +2849,9 @@ function openHelpMenu(){
   const panel=document.getElementById('help-panel');
   if(!panel) return;
   closeNotificationCenter();
-  updateHelpMenu();
   panel.classList.add('show');
   document.getElementById('help-btn').classList.add('active');
+  updateHelpMenu();
 }
 
 function closeHelpMenu(){
