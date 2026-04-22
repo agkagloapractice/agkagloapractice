@@ -827,7 +827,7 @@
           <div class="settings-row">
             <div class="settings-row-left">
               <div class="settings-row-title">Built By Adithan G.</div>
-              <div class="settings-row-desc">AGK OS 1.7.13</div>
+              <div class="settings-row-desc">AGK OS 1.7.14</div>
             </div>
           </div>
         </div>
@@ -1157,6 +1157,7 @@ onAuthStateChanged(_auth, async fbUser => {
         if(typeof updateStreak === 'function') updateStreak();
       }
     }
+    if(typeof syncCurrentEventsOnLogin === 'function') syncCurrentEventsOnLogin(merged,{reason:'session-restore'});
   }
 });
 </script>
@@ -2751,6 +2752,13 @@ mergeUniqueEntries(QUIZ_DATA.propaganda,AGLOA_PROPAGANDA_QUIZ);
 
 const SOURCE_FLASHCARD_DATA=Object.fromEntries(Object.entries(FLASHCARD_DATA).map(([subject,items])=>[subject,items.slice()]));
 const SOURCE_QUIZ_DATA=Object.fromEntries(Object.entries(QUIZ_DATA).map(([subject,items])=>[subject,items.slice()]));
+
+const CURRENT_EVENTS_FEED_URL='./current-events-content.json';
+const CURRENT_EVENTS_FEED_CACHE_KEY='agk_current_events_feed_cache';
+const CURRENT_EVENTS_SYNC_META_KEY='agk_current_events_sync_meta';
+let _currentEventsSyncPromise=null;
+let _currentEventsLastSyncUserKey='';
+let _currentEventsLastSyncAt=0;
  
 // ============================================================
 // STATE
@@ -3050,6 +3058,150 @@ function renderSectionFilter(section,subject,setter){
 function cleanStudyText(value){
   return String(value ?? '').replace(/\s+/g,' ').trim();
 }
+
+function cloneStudyFlashcard(item){
+  const cloned={
+    q:cleanStudyText(item&&item.q),
+    a:cleanStudyText(item&&item.a),
+    section:cleanStudyText(item&&item.section)
+  };
+  if(Array.isArray(item&&item.group)) cloned.group=item.group.slice();
+  return cloned;
+}
+
+function cloneStudyQuiz(item){
+  const cloned={
+    q:cleanStudyText(item&&item.q),
+    section:cleanStudyText(item&&item.section),
+    options:Array.isArray(item&&item.options)?item.options.map(option=>cleanStudyText(option)).filter(Boolean):[],
+    answer:Number.isInteger(item&&item.answer)?item.answer:0,
+    explanation:cleanStudyText(item&&item.explanation)
+  };
+  if(Array.isArray(item&&item.group)) cloned.group=item.group.slice();
+  return cloned;
+}
+
+function normalizeCurrentEventsFlashcard(item){
+  if(!item||typeof item!=='object') return null;
+  const normalized=cloneStudyFlashcard(item);
+  return normalized.q&&normalized.a&&normalized.section?normalized:null;
+}
+
+function normalizeCurrentEventsQuiz(item){
+  if(!item||typeof item!=='object') return null;
+  const normalized=cloneStudyQuiz(item);
+  if(!normalized.q||!normalized.section||normalized.options.length<2) return null;
+  if(!Number.isInteger(normalized.answer)||normalized.answer<0||normalized.answer>=normalized.options.length) return null;
+  return normalized;
+}
+
+function getCurrentEventsSyncMeta(){
+  try{return JSON.parse(localStorage.getItem(CURRENT_EVENTS_SYNC_META_KEY)||'null');}catch(e){return null;}
+}
+
+function getCachedCurrentEventsFeed(){
+  try{return JSON.parse(localStorage.getItem(CURRENT_EVENTS_FEED_CACHE_KEY)||'null');}catch(e){return null;}
+}
+
+function cacheCurrentEventsFeed(feed){
+  localStorage.setItem(CURRENT_EVENTS_FEED_CACHE_KEY,JSON.stringify(feed));
+}
+
+function resetCurrentEventsPracticeState(){
+  if(currentSubject!=='currentevents') return;
+  flashcardQueue=[];
+  quizCards=[];
+  cardIndex=0;
+  isFlipped=false;
+  quizIndex=0;
+  quizAnswered=false;
+  selectedOption=null;
+  quizScore={correct:0,incorrect:0};
+  competeCards=[];
+  competeIndex=0;
+  competeAnswered=false;
+  competeRunning=false;
+  competeScore={correct:0,wrong:0};
+  clearCompeteTimer();
+  render();
+  if(currentMode==='flashcards') scheduleAutoFlip();
+}
+
+function applyCurrentEventsFeed(feed){
+  const baseFlashcards=(SOURCE_FLASHCARD_DATA.currentevents||[]).map(cloneStudyFlashcard);
+  const baseQuiz=(SOURCE_QUIZ_DATA.currentevents||[]).map(cloneStudyQuiz);
+  const remoteFlashcards=(Array.isArray(feed&&feed.flashcards)?feed.flashcards:[])
+    .map(normalizeCurrentEventsFlashcard)
+    .filter(Boolean);
+  const remoteQuiz=(Array.isArray(feed&&feed.quiz)?feed.quiz:[])
+    .map(normalizeCurrentEventsQuiz)
+    .filter(Boolean);
+
+  mergeUniqueEntries(baseFlashcards,remoteFlashcards);
+  mergeUniqueEntries(baseQuiz,remoteQuiz);
+
+  FLASHCARD_DATA.currentevents=baseFlashcards;
+  QUIZ_DATA.currentevents=baseQuiz;
+  _coveragePreparedMinimum=0;
+  ensureMinimumSectionCoverage(MIN_SECTION_COVERAGE);
+
+  const meta={
+    updatedAt:cleanStudyText(feed&&feed.updatedAt)||new Date().toISOString(),
+    flashcardCount:remoteFlashcards.length,
+    quizCount:remoteQuiz.length
+  };
+  localStorage.setItem(CURRENT_EVENTS_SYNC_META_KEY,JSON.stringify(meta));
+  resetCurrentEventsPracticeState();
+  return meta;
+}
+
+async function syncCurrentEventsOnLogin(user,options={}){
+  if(!user||user.isGuest) return null;
+  const userKey=user.uid||user.email||user.name||'user';
+  if(!options.force&&_currentEventsSyncPromise) return _currentEventsSyncPromise;
+  if(!options.force&&_currentEventsLastSyncUserKey===userKey&&Date.now()-_currentEventsLastSyncAt<15000) return null;
+  _currentEventsLastSyncUserKey=userKey;
+  _currentEventsLastSyncAt=Date.now();
+
+  _currentEventsSyncPromise=(async()=>{
+    const cachedFeed=getCachedCurrentEventsFeed();
+    if(cachedFeed) applyCurrentEventsFeed(cachedFeed);
+
+    try{
+      const response=await fetch(`${CURRENT_EVENTS_FEED_URL}?loginSync=${Date.now()}`,{cache:'no-store'});
+      if(!response.ok) throw new Error(`Current events feed request failed with status ${response.status}`);
+      const payload=await response.json();
+      const previousMeta=getCurrentEventsSyncMeta();
+      cacheCurrentEventsFeed(payload);
+      const nextMeta=applyCurrentEventsFeed(payload);
+      if(typeof pushNotification==='function'){
+        const changed=!previousMeta
+          ||previousMeta.updatedAt!==nextMeta.updatedAt
+          ||previousMeta.flashcardCount!==nextMeta.flashcardCount
+          ||previousMeta.quizCount!==nextMeta.quizCount;
+        if(changed){
+          pushNotification({
+            title:'Current Events refreshed',
+            message:'Current-events flashcards, quiz questions, and compete prompts were refreshed from the latest shared study file.',
+            icon:'🌍',
+            tag:'Current Events',
+            dedupeKey:`current-events-sync-${nextMeta.updatedAt}-${nextMeta.flashcardCount}-${nextMeta.quizCount}`
+          });
+        }
+      }
+      return nextMeta;
+    }catch(e){
+      console.warn('Current events sync failed',e);
+      if(cachedFeed) return getCurrentEventsSyncMeta();
+      return null;
+    }
+  })().finally(()=>{
+    _currentEventsSyncPromise=null;
+  });
+
+  return _currentEventsSyncPromise;
+}
+
 function shortStudyText(value,maxLen=180){
   const cleaned=cleanStudyText(value);
   return cleaned.length<=maxLen?cleaned:`${cleaned.slice(0,maxLen-1)}…`;
@@ -3980,6 +4132,7 @@ function signInUser(user){
   updateSettingsProfile();
   updateStreak();
   checkFeedbackNotification(user);
+  syncCurrentEventsOnLogin(user,{reason:'login'});
   render();
   if(window._pendingTutorial){
     window._pendingTutorial=false;
